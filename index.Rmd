@@ -158,7 +158,9 @@ Then we use cross validation to check the accuracy of the model.
 predForest = predict(forest, newdata = cv)
 
 #Build a confusion matrix of the results
-confusionMatrix(predForest, cv$classe)
+cm = confusionMatrix(predForest, cv$classe)
+
+cm
 ```
 
 We find that there is a significant improvement in the accuracy compared to the decision trees.
@@ -215,4 +217,9 @@ plot(forest)
 
 # This plot shows the most signifiant variables in our model
 varImpPlot(forest)
+
 ```
+
+Out of sample error rate for this model is (1 - Accuracy) = `r (1 - cm$overall['Accuracy'])` or `r (1 - cm$overall['Accuracy']) * 100` %
+
+

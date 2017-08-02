@@ -452,7 +452,13 @@ First, we create decision trees to fit our data and look at its salient paramete
 set.seed(123)
 # Build a decision tree using the training set
 tree = train(classe ~ ., method = "rpart", data = train)
+```
 
+```
+## Loading required package: rpart
+```
+
+```r
 print(tree)
 ```
 
@@ -569,7 +575,9 @@ Then we use cross validation to check the accuracy of the model.
 predForest = predict(forest, newdata = cv)
 
 #Build a confusion matrix of the results
-confusionMatrix(predForest, cv$classe)
+cm = confusionMatrix(predForest, cv$classe)
+
+cm
 ```
 
 ```
@@ -626,7 +634,40 @@ fitControl = trainControl(method = "repeatedcv", number = 3, repeats = 2,
 # Build a boosting model on our training data
 boost = train(classe ~ ., method = "gbm", data = train, 
               trControl = fitControl, verbose = FALSE)
+```
 
+```
+## Loading required package: gbm
+```
+
+```
+## Loading required package: survival
+```
+
+```
+## 
+## Attaching package: 'survival'
+```
+
+```
+## The following object is masked from 'package:caret':
+## 
+##     cluster
+```
+
+```
+## Loading required package: splines
+```
+
+```
+## Loaded gbm 2.1.3
+```
+
+```
+## Loading required package: plyr
+```
+
+```r
 # De-register parallel processing cluster
 stopCluster(cluster)
 registerDoSEQ()
@@ -711,3 +752,7 @@ varImpPlot(forest)
 ```
 
 ![](index_files/figure-html/unnamed-chunk-16-2.png)<!-- -->
+
+Out of sample error rate for this model is (1 - Accuracy) = 0.0050979 or 0.5097879 %
+
+
