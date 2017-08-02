@@ -1,0 +1,17 @@
+base
+bitops
+RCurl
+lattice
+ggplot2
+caret
+rattle
+foreach
+iterators
+doParallel
+randomForest
+gplots
+ROCR
+rpart
+survival
+gbm
+plyr
