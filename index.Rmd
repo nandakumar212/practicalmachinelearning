@@ -1,0 +1,216 @@
+---
+title: "Practical Machine Learning Course Project - Human Activity Recognition"
+author: "Nanda kumar Sathiyamoorthy"
+date: "August 2, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+```
+
+# Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this analysis, our goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+## Data
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+
+# Exploratory Analysis
+
+```{r message = FALSE, cache = FALSE}
+# Load necessary packages
+library(RCurl)
+library(caret)
+library(rattle)
+library(parallel)
+library(doParallel)
+library(randomForest)
+library(ROCR)
+```
+
+```{r}
+# Read the training and test data using the corresponding URLs
+url_train = getURL("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+df = read.csv(textConnection(url_train))
+
+url_test = getURL("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+test = read.csv(textConnection(url_test))
+```
+
+Now, let us look at the data and try to understand its structure
+
+```{r}
+# Look at the dimensions of the data
+dim(df)
+
+# Look at the first few lines of the data
+head(df)
+
+# Look at the structure of the data
+str(df, list.len = 10)
+
+# Look at the classes of outcome variable
+table(df$classe)
+```
+
+Set the seed for reproducibility and split the training data such that 3/4th of the data is used for training the models and rest 1/4th is used for cross-validation.
+
+```{r}
+# Set random seed
+set.seed(123)
+
+# Split the training data for cross-validation
+intrain = createDataPartition(y = df$classe, p = 0.75, list = FALSE)
+train = df[intrain, ]
+cv = df[-intrain, ]
+```
+
+On further exploration we find that the variables fall into two categories - ones with no NA values and ones with a lot of NAs. 
+
+```{r}
+# Find the number of NA's for each column of the data frame
+table(colSums(is.na(train)))
+```
+
+Variables under the latter case needs to be removed as they would provide significant contribution for prediction.
+
+```{r}
+# Remove the columns with NA's in them
+train = subset(train, select = subset(names(train),colSums(is.na(train)) == 0))
+```
+
+Looking at the first 7 variables, we find that they are actually not relevant for predicting the outcome and we will remove them from the data set.
+
+```{r}
+names(train)[1:10]
+train = subset(train, select = -c(1:7))
+```
+
+Next, we will remove the variables with near zero variance which would be insignificant for building our models.
+
+```{r}
+
+# Remove the variables with near zero variance
+zeroVar = nearZeroVar(train, saveMetrics = TRUE)
+train = train[,zeroVar$nzv == FALSE]
+
+# Ensure that the same columns are present in all the data sets.
+cv = cv[, names(cv) %in% names(train)]
+test = test[, names(test) %in% names(train)]
+```
+
+# Developing models
+
+
+## Trees :
+
+First, we create decision trees to fit our data and look at its salient parameters.
+
+```{r}
+set.seed(123)
+# Build a decision tree using the training set
+tree = train(classe ~ ., method = "rpart", data = train)
+
+print(tree)
+
+# Plot the tree created
+fancyRpartPlot(tree$finalModel)
+```
+
+We now perform cross validation for this tree model by trying the predict previusly unseen data.
+
+```{r}
+# Predict outcome of new data
+predTree = predict(tree, newdata = cv)
+
+#Build a confusion matrix of the results
+confusionMatrix(predTree, cv$classe)
+```
+
+As we see the accuracy of the model is very low and hence would not be very useful for prediction.
+
+## Random Forests :
+
+Next, we build random forests on our training set.
+
+```{r}
+set.seed(123)
+# Build a random forest using the training set
+forest = randomForest(classe ~ ., data = train)
+print(forest)
+```
+
+Then we use cross validation to check the accuracy of the model.
+
+```{r}
+# Predict outcome of new data
+predForest = predict(forest, newdata = cv)
+
+#Build a confusion matrix of the results
+confusionMatrix(predForest, cv$classe)
+```
+
+We find that there is a significant improvement in the accuracy compared to the decision trees.
+
+## Boosting :
+
+Finally, we try generalized boosting on our training set.
+
+Since, boosting is computationally intensive we use parallelize the processby setting up the appropriate parameteres.
+
+```{r}
+# Set up parallelization
+cluster <- makeCluster(detectCores() - 1) 
+registerDoParallel(cluster)
+
+fitControl = trainControl(method = "repeatedcv", number = 3, repeats = 2,
+                          allowParallel = TRUE)
+
+# Build a boosting model on our training data
+boost = train(classe ~ ., method = "gbm", data = train, 
+              trControl = fitControl, verbose = FALSE)
+
+# De-register parallel processing cluster
+stopCluster(cluster)
+registerDoSEQ()
+```
+
+Check the accuracy of the model through cross-validation.
+
+```{r}
+# Predict outcome of new data
+predBoost = predict(boost, newdata = cv)
+
+#Build a confusion matrix of the results
+confusionMatrix(predBoost, cv$classe)
+```
+
+We find that, boosting is much better than decision trees but not as good as random forest. 
+
+Hence, we choose random forest as our final model.
+
+# Making predictions
+
+Finally, we use our chosen random forest model for making predictions in the test set.
+
+```{r}
+predict(forest, newdata = test)
+```
+
+We make some plots to look at the error rates and significant variables in our random forest model.
+
+```{r}
+plot(forest)
+
+# This plot shows the most signifiant variables in our model
+varImpPlot(forest)
+```
